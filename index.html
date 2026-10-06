@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIR Behavioral Model</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #F8F9FA; color: #003366; display: flex; flex-direction: column; align-items: center; margin-top: 20px; }
+        canvas { background: white; border: 2px solid #003366; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .controls { display: flex; gap: 20px; background: white; padding: 15px 25px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .slider-group { display: flex; flex-direction: column; align-items: center; }
+        .stats { display: flex; gap: 20px; font-weight: bold; margin-bottom: 10px; }
+        .stat-s { color: #17A2B8; }
+        .stat-i { color: #FD7E14; }
+        .stat-r { color: #6C757D; }
+        button { background: #003366; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 15px; }
+        button:hover { background: #002244; }
+    </style>
+</head>
+<body>
+
+    <h2>Dynamic Behavioral Feedback Simulation</h2>
+    <div class="stats">
+        <span class="stat-s">Susceptible: <span id="countS">90</span></span>
+        <span class="stat-s">|</span>
+        <span class="stat-i">Infected: <span id="countI">10</span></span>
+        <span class="stat-s">|</span>
+        <span class="stat-r">Recovered: <span id="countR">0</span></span>
+    </div>
+
+    <canvas id="simCanvas" width="600" height="400"></canvas>
+
+    <div class="controls">
+        <div class="slider-group">
+            <label>Transmission Prob. (β): <span id="betaVal">0.05</span></label>
+            <input type="range" id="betaInput" min="0" max="0.2" step="0.01" value="0.05">
+        </div>
+        <div class="slider-group">
+            <label>Recovery Rate (γ): <span id="gammaVal">0.005</span></label>
+            <input type="range" id="gammaInput" min="0" max="0.02" step="0.001" value="0.005">
+        </div>
+        <div class="slider-group">
+            <label style="color: #FD7E14; font-weight:bold;">Fear Factor (α): <span id="alphaVal">0</span></label>
+            <input type="range" id="alphaInput" min="0" max="0.5" step="0.01" value="0">
+        </div>
+    </div>
+    <button onclick="resetSimulation()">Restart Outbreak</button>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let particles = [];
+        const numParticles = 100;
+        const initialInfected = 10;
+        const radius = 5;
+        const speed = 2;
+
+        let counts = { S: 0, I: 0, R: 0 };
+
+        function initParticles() {
+            particles = [];
+            for (let i = 0; i < numParticles; i++) {
+                particles.push({
+                    x: Math.random() * (canvas.width - 2 * radius) + radius,
+                    y: Math.random() * (canvas.height - 2 * radius) + radius,
+                    vx: (Math.random() - 0.5) * speed,
+                    vy: (Math.random() - 0.5) * speed,
+                    state: i < initialInfected ? 'I' : 'S',
+                });
+            }
+            updateCounts();
+        }
+
+        function updateCounts() {
+            counts = { S: 0, I: 0, R: 0 };
+            particles.forEach(p => counts[p.state]++);
+            document.getElementById('countS').innerText = counts.S;
+            document.getElementById('countI').innerText = counts.I;
+            document.getElementById('countR').innerText = counts.R;
+        }
+
+        function resetSimulation() {
+            initParticles();
+        }
+
+        function update() {
+            const baseBeta = parseFloat(document.getElementById('betaInput').value);
+            const gamma = parseFloat(document.getElementById('gammaInput').value);
+            const alpha = parseFloat(document.getElementById('alphaInput').value);
+
+            // Update UI Labels
+            document.getElementById('betaVal').innerText = baseBeta.toFixed(2);
+            document.getElementById('gammaVal').innerText = gamma.toFixed(3);
+            document.getElementById('alphaVal').innerText = alpha.toFixed(2);
+
+            // The core mathematical innovation:
+            // Effective transmission drops as Infected count rises based on Fear Factor
+            const effectiveBeta = baseBeta / (1 + alpha * counts.I);
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            particles.forEach((p, i) => {
+                // Movement
+                p.x += p.vx;
+                p.y += p.vy;
+
+                // Wall collisions
+                if (p.x <= radius || p.x >= canvas.width - radius) p.vx *= -1;
+                if (p.y <= radius || p.y >= canvas.height - radius) p.vy *= -1;
+
+                // Infection collisions
+                if (p.state === 'I') {
+                    for (let j = 0; j < numParticles; j++) {
+                        if (i !== j && particles[j].state === 'S') {
+                            const p2 = particles[j];
+                            const dist = Math.hypot(p.x - p2.x, p.y - p2.y);
+                            if (dist < radius * 2) {
+                                if (Math.random() < effectiveBeta) {
+                                    particles[j].state = 'I';
+                                }
+                            }
+                        }
+                    }
+                    // Recovery
+                    if (Math.random() < gamma) {
+                        p.state = 'R';
+                    }
+                }
+
+                // Draw
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+                if (p.state === 'S') ctx.fillStyle = '#17A2B8'; // Teal
+                else if (p.state === 'I') ctx.fillStyle = '#FD7E14'; // Orange
+                else ctx.fillStyle = '#6C757D'; // Gray
+                ctx.fill();
+                ctx.closePath();
+            });
+
+            updateCounts();
+            requestAnimationFrame(update);
+        }
+
+        initParticles();
+        update();
+    </script>
+</body>
+</html>
